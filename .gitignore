@@ -1,6 +1,4 @@
 data/
-results/
 __pycache__/
 *.pyc
 .venv/
-figures/
