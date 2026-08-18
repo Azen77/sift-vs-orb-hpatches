@@ -29,15 +29,6 @@ https://github.com/hpatches/hpatches-dataset and place it at
 `data/hpatches-sequences-release.zip`, then re-run the script — it'll pick up the
 local file and just extract it.
 
-**No internet / want to test the pipeline first?** Run:
-
-```bash
-python make_synthetic_sequence.py
-```
-
-This generates a couple of synthetic sequences with known homographies so you can
-verify everything works before downloading the real 1.3GB dataset.
-
 ## 2. Run the evaluation
 
 ```bash
@@ -128,12 +119,4 @@ instead, to trace the actual precision/recall tradeoff curve.
 | `run_evaluation.py` | Runs the pipeline across all sequences, aggregates precision/recall, plots |
 | `run_pr_curve.py` | Sweeps ratio-test threshold to trace a true precision-recall curve |
 | `download_data.py` | Fetches + extracts the HPatches sequences dataset |
-| `make_synthetic_sequence.py` | Generates fake sequences for pipeline testing |
 | `visualize_matches.py` | Draws correct/incorrect matches side by side |
-
-## Extending
-
-- Add another detector (e.g. `cv2.AKAZE_create()`) — just add it to `get_detector()`
-  in `matching_pipeline.py` and to the `methods` list in `run_evaluation.py`.
-- The ratio-test threshold (0.75) in `match_descriptors()` is worth tuning/reporting
-  on separately — lower it for higher precision at the cost of fewer matches.
