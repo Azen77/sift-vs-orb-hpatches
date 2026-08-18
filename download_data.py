@@ -1,14 +1,5 @@
 """
-Downloads and extracts the HPatches "sequences" dataset (full images + ground-truth
-homographies), which is what we need for wide-baseline matching evaluation.
-
-Usage:
-    python download_data.py
-
-This will populate ./data/hpatches-sequences-release/ with one folder per sequence,
-each containing:
-    1.ppm ... 6.ppm   -- the images (1 = reference)
-    H_1_2 ... H_1_6    -- 3x3 homographies mapping image 1 -> image N
+Downloads and extracts the HPatches "sequences" dataset
 """
 
 import os
@@ -47,6 +38,9 @@ def download():
     with zipfile.ZipFile(ARCHIVE_PATH, "r") as zf:
         zf.extractall(DATA_DIR)
     print(f"Done. Sequences extracted to {EXTRACT_DIR}")
+
+    os.remove(ARCHIVE_PATH)
+    print("Removed zip file.")
 
 
 if __name__ == "__main__":

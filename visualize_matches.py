@@ -46,7 +46,7 @@ def draw_matches_for_method(images, homographies, method, pair_n, threshold=3):
         images[1], kps1, images[pair_n], kpsN, img_correct, None,
         matchColor=(0, 200, 0), singlePointColor=(120, 120, 120),
         flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS,
-    )
+    )  # type: ignore
     vis = cv2.drawMatches(
         images[1], kps1, images[pair_n], kpsN, img_incorrect, vis,
         matchColor=(0, 0, 220), singlePointColor=(120, 120, 120),

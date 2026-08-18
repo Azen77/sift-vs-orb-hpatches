@@ -1,16 +1,22 @@
 """
 Runs SIFT vs ORB matching evaluation across the whole HPatches sequences dataset,
-aggregates precision-style stats, and produces comparison plots + a results CSV.
+aggregates precision AND recall stats, and produces comparison plots + a results CSV.
+
+Note: this script's precision/recall are computed at a FIXED ratio-test threshold
+(0.75), varying only the pixel correctness threshold -- it does not trace a true
+precision-recall curve. For that, run run_pr_curve.py, which sweeps the ratio-test
+threshold instead (the operating-point parameter that actually trades precision
+for recall).
 
 Usage:
     python run_evaluation.py [--data-dir DATA_DIR] [--out-dir OUT_DIR] [--limit N]
 
 Outputs:
-    results/raw_results.csv           -- one row per (sequence, pair, method)
-    figures/accuracy_by_baseline.png  -- mean matching accuracy vs. image pair index
+    results/raw_results.csv                    -- one row per (sequence, pair, method)
+    figures/accuracy_by_baseline.png           -- mean matching accuracy vs. image pair index
     figures/accuracy_viewpoint_vs_illumination.png
-    figures/precision_recall.png      -- precision vs threshold, proxy for PR curve
-    figures/num_matches.png           -- raw match counts, SIFT vs ORB
+    figures/precision_recall_vs_threshold.png  -- precision & recall vs pixel threshold
+    figures/num_matches.png                    -- raw match counts, SIFT vs ORB
 """
 
 import argparse
@@ -84,8 +90,11 @@ def run_all(data_dir, out_dir, limit=None):
                 for t in THRESHOLDS:
                     correct = r["correct_at_threshold"][t]
                     total = r["num_matches"]
+                    gt = r["ground_truth_at_threshold"][t]
                     row[f"correct_at_{t}px"] = correct
+                    row[f"num_ground_truth_at_{t}px"] = gt
                     row[f"precision_at_{t}px"] = correct / total if total > 0 else 0.0
+                    row[f"recall_at_{t}px"] = correct / gt if gt > 0 else 0.0
                 rows.append(row)
 
         if (si + 1) % 10 == 0 or si == len(sequences) - 1:
@@ -156,21 +165,27 @@ def make_plots(rows, figures_dir, primary_threshold=3):
     fig.savefig(os.path.join(figures_dir, "accuracy_viewpoint_vs_illumination.png"), dpi=150)
     plt.close(fig)
 
-    # --- Plot 3: precision vs pixel threshold (proxy PR curve) ---
+    # --- Plot 3: precision AND recall vs pixel threshold (not a full PR curve --
+    #     that's in run_pr_curve.py, which sweeps the ratio-test threshold instead) ---
     fig, ax = plt.subplots(figsize=(7, 5))
     for method in methods:
-        ys = []
+        prec_ys, rec_ys = [], []
         for t in THRESHOLDS:
-            vals = [r[f"precision_at_{t}px"] for r in rows if r["method"] == method]
-            ys.append(np.mean(vals) if vals else 0.0)
-        ax.plot(THRESHOLDS, ys, marker="o", label=method.upper(), color=colors[method])
+            prec_vals = [r[f"precision_at_{t}px"] for r in rows if r["method"] == method]
+            rec_vals = [r[f"recall_at_{t}px"] for r in rows if r["method"] == method]
+            prec_ys.append(np.mean(prec_vals) if prec_vals else 0.0)
+            rec_ys.append(np.mean(rec_vals) if rec_vals else 0.0)
+        ax.plot(THRESHOLDS, prec_ys, marker="o", label=f"{method.upper()} precision",
+                 color=colors[method], linestyle="-")
+        ax.plot(THRESHOLDS, rec_ys, marker="s", label=f"{method.upper()} recall",
+                 color=colors[method], linestyle="--")
     ax.set_xlabel("Correctness threshold (pixels)")
-    ax.set_ylabel("Mean matching precision")
-    ax.set_title("Precision vs. correctness threshold")
+    ax.set_ylabel("Mean value")
+    ax.set_title("Precision and recall vs. correctness threshold")
     ax.legend()
     ax.grid(alpha=0.3)
     fig.tight_layout()
-    fig.savefig(os.path.join(figures_dir, "precision_recall.png"), dpi=150)
+    fig.savefig(os.path.join(figures_dir, "precision_recall_vs_threshold.png"), dpi=150)
     plt.close(fig)
 
     # --- Plot 4: raw number of matches + runtime, SIFT vs ORB ---

@@ -88,6 +88,29 @@ def warp_point(pt, H):
     return warped[0], warped[1]
 
 
+def count_ground_truth_correspondences(kps1, kps2, H, threshold):
+    """
+    Counts how many keypoints in image 1 have a plausible corresponding keypoint in
+    image 2, based purely on spatial proximity after warping with the ground-truth
+    homography -- independent of any descriptor matching.
+
+    This is the recall denominator (TP + FN): the total number of correspondences
+    that a perfect matcher *could* have found, given the keypoints each detector
+    actually located.
+    """
+    if len(kps1) == 0 or len(kps2) == 0:
+        return 0
+
+    pts2 = np.array([kp.pt for kp in kps2])
+    count = 0
+    for kp in kps1:
+        wx, wy = warp_point(kp.pt, H)
+        dists = np.hypot(pts2[:, 0] - wx, pts2[:, 1] - wy)
+        if dists.min() <= threshold:
+            count += 1
+    return count
+
+
 def evaluate_matches(kps1, kps2, matches, H, threshold):
     """
     For each match, warp the keypoint from image 1 into image 2's frame using the
@@ -121,6 +144,7 @@ def process_sequence(seq_dir, method, thresholds=(1, 2, 3, 5, 10)):
           'num_kp1': ..., 'num_kp2': ...,
           'num_matches': ...,
           'correct_at_threshold': {1: c1, 2: c2, ...},
+          'ground_truth_at_threshold': {1: g1, 2: g2, ...},  # recall denominator
         }
     """
     images, homographies = load_sequence(seq_dir)
@@ -141,9 +165,13 @@ def process_sequence(seq_dir, method, thresholds=(1, 2, 3, 5, 10)):
         H = homographies[n]
 
         correct_at_threshold = {}
+        ground_truth_at_threshold = {}
         for t in thresholds:
             c, total = evaluate_matches(kps_cache[1], kps_cache[n], matches, H, t)
             correct_at_threshold[t] = c
+            ground_truth_at_threshold[t] = count_ground_truth_correspondences(
+                kps_cache[1], kps_cache[n], H, t
+            )
 
         results.append({
             "pair": (1, n),
@@ -151,6 +179,60 @@ def process_sequence(seq_dir, method, thresholds=(1, 2, 3, 5, 10)):
             "num_kp2": len(kps_cache[n]),
             "num_matches": len(matches),
             "correct_at_threshold": correct_at_threshold,
+            "ground_truth_at_threshold": ground_truth_at_threshold,
         })
+
+    return results
+
+
+def process_sequence_pr_sweep(seq_dir, method, ratios, pixel_threshold=3):
+    """
+    Traces out a true precision-recall curve for one sequence by sweeping the
+    ratio-test threshold: a looser ratio accepts more matches (higher recall,
+    usually lower precision), a stricter one accepts fewer (lower recall, usually
+    higher precision).
+
+    Ground-truth correspondences (the recall denominator) are computed once per
+    pair, since they don't depend on the ratio threshold.
+
+    Returns a list of dicts, one per (pair, ratio):
+        {
+          'pair': (1, N), 'ratio': r,
+          'num_matches': ..., 'num_correct': ..., 'num_ground_truth': ...,
+        }
+    """
+    images, homographies = load_sequence(seq_dir)
+    detector = get_detector(method)
+
+    kps_cache = {}
+    descs_cache = {}
+    for i, img in images.items():
+        kps, descs = detect_and_describe(detector, img)
+        kps_cache[i] = kps
+        descs_cache[i] = descs
+
+    results = []
+    for n in range(2, 7):
+        if n not in homographies:
+            continue
+        H = homographies[n]
+        num_gt = count_ground_truth_correspondences(
+            kps_cache[1], kps_cache[n], H, pixel_threshold
+        )
+
+        for ratio in ratios:
+            matches = match_descriptors(
+                descs_cache[1], descs_cache[n], method, ratio=ratio
+            )
+            num_correct, num_total = evaluate_matches(
+                kps_cache[1], kps_cache[n], matches, H, pixel_threshold
+            )
+            results.append({
+                "pair": (1, n),
+                "ratio": ratio,
+                "num_matches": num_total,
+                "num_correct": num_correct,
+                "num_ground_truth": num_gt,
+            })
 
     return results
